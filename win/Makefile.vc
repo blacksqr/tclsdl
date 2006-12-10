@@ -1,0 +1,138 @@
+# -*- Makefile -*- 
+#
+#
+# Copyright (C) 2006 Pat Thoyts <patthoyts@users.sourceforge.net>
+#
+#-------------------------------------------------------------------------
+# $Id$
+#-------------------------------------------------------------------------
+
+VERSION=0.1
+
+# You should set SDLDIR to the directory containing your SDL include
+# and lib directories.
+!ifndef SDLDIR
+SDLDIR    =c:\opt
+!endif
+
+!ifndef TCLDIR
+TCLDIR    =c:\opt\tcl
+!endif
+
+#-------------------------------------------------------------------------
+# There should be no need to edit below this point.
+#-------------------------------------------------------------------------
+
+SRCDIR =..
+
+!ifndef DEBUG
+DEBUG   =0
+!endif
+!ifndef PROFILE
+PROFILE =0
+!endif
+!ifndef SYMBOLS
+SYMBOLS = 1
+!endif
+!ifndef CC
+CC=cl
+!endif
+!ifndef LINK
+LINK=link
+!endif
+
+!if $(DEBUG)
+OUTDIR =Debug
+CFLAGS =-Od -Zi -GZ -MDd -D_DEBUG
+LDFLAGS=-debug:full -debugtype:cv
+!else
+OUTDIR =Release
+!if $(SYMBOLS)
+CFLAGS =-Od -Zi -Op -Gs -MD -DNDEBUG
+LDFLAGS=-debug -opt:ref -opt:icf,3
+!else
+CFLAGS =-O2 -Otip -Gs -MD -DNDEBUG
+LDFLAGS=-release -opt:ref -opt:icf,3
+!endif
+!endif
+
+!if $(PROFILE)
+CFLAGS =$(CFLAGS) -Zi
+LDFLAGS=$(LDFLAGS) -profile -map
+!endif
+
+!if "$(OS)" == "Windows_NT"
+RMDIR = rmdir /s /q >NUL
+!else
+RMDIR = deltree /y
+!endif
+DEL   = del /f /q
+
+TMPDIR =$(OUTDIR)\Objects
+
+CC     =$(CC) -nologo
+LD     =$(LINK) -nologo
+
+CFLAGS =$(CFLAGS) -W3 -YX -Fp$(TMPDIR)^\
+INC    =-I$(SDLDIR)/include -I$(TCLDIR)/include
+DEFS   =-DWIN32 -DHAVE_OPENGL -DUSE_TCL_STUBS -DBUILD_tclsdl \
+	-DPACKAGE_NAME=\"Tclsdl\" -DPACKAGE_VERSION=\"$(VERSION)\"
+LIBS   =-libpath:$(SDLDIR)\lib SDLmain.lib SDL.lib SDL_mixer.lib\
+	-libpath:$(TCLDIR)\lib tclstub84.lib kernel32.lib
+#LDFLAGS=$(LDFLAGS) -subsystem:windows
+
+OBJS   = \
+        $(TMPDIR)\tclsdl.obj \
+	$(TMPDIR)\surface.obj \
+	$(TMPDIR)\mixer.obj \
+	$(TMPDIR)\bgeval.obj
+
+all:    tclsdl
+tclsdl: setup $(OUTDIR)\tclsdl.dll
+
+$(OUTDIR)\tclsdl.dll: $(OBJS)
+	$(LD) -dll $(LDFLAGS) -out:$@ $** $(LIBS)
+
+.PHONY: all tclsdl
+
+#-------------------------------------------------------------------------
+setup:
+	@if not exist $(OUTDIR) mkdir $(OUTDIR)
+	@if not exist $(TMPDIR) mkdir $(TMPDIR)
+
+clean:
+	@if exist $(TMPDIR)\NUL $(RMDIR) $(TMPDIR) >NUL
+
+realclean: clean
+	@if exist $(OUTDIR)\NUL $(RMDIR) $(OUTDIR) >NUL
+
+.PHONY: setup clean realclean
+#-------------------------------------------------------------------------
+
+.SUFFIXES:.c .cpp .rc
+
+{$(SRCDIR)\win}.c{$(TMPDIR)}.obj::
+	$(CC) $(CFLAGS) $(DEFS) $(INC) -Fo$(TMPDIR)\ -c @<<
+$<
+<<
+
+{$(SRCDIR)\generic}.c{$(TMPDIR)}.obj::
+	$(CC) $(CFLAGS) $(DEFS) $(INC) -Fo$(TMPDIR)\ -c @<<
+$<
+<<
+
+{$(SRCDIR)}.cpp{$(TMPDIR)}.obj::
+	$(CC) $(CFLAGS) $(DEFS) $(INC) -Fo$(TMPDIR)\ -c @<<
+$<
+<<
+
+{$(SRCDIR)}.rc{$(TMPDIR)}.res:
+	$(RC) -fo $@ -r -D__WIN32__ \
+	-DCOMMAVERSION=$(VERSION:.=,),0,0 \
+	-DVERSION=\"$(VERSION)\" \
+!if $(DEBUG)
+	-d DEBUG \
+!endif
+	$<
+
+#-------------------------------------------------------------------------
