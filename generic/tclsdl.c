@@ -298,7 +298,7 @@ Tclsdl_Init(Tcl_Interp *interp)
     if (Tcl_Eval(interp, initScript) != TCL_OK)
 	return TCL_ERROR;
 
-    Tcl_PkgProvideEx(interp, PACKAGE_NAME, PACKAGE_VERSION, NULL);
+    Tcl_PkgProvideEx(interp, "Tclsdl", PACKAGE_VERSION, NULL);
     return TCL_OK;
 }
 
