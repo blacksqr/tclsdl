@@ -63,8 +63,8 @@ int
 SDLColor_SetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
 {
     SDL_Color *colorPtr = NULL;
-    Tcl_Obj **objv;
-    int r, g, b, objc;
+    Tcl_Obj **objv = NULL;
+    int r = 0, g = 0, b = 0, objc = 0;
     long value = 0;
 
     if (Tcl_ListObjGetElements(interp, objPtr, &objc, &objv) != TCL_OK) {
@@ -97,7 +97,6 @@ static int
 GetSDLColorFromObj(Tcl_Interp *interp, SDL_Surface *surface, 
                    Tcl_Obj *objPtr, Uint32 *colorPtr)
 {
-    int r = TCL_OK;
     SDL_Color *p = NULL;
 
     if (objPtr->typePtr != &sdlColorType) {
@@ -343,7 +342,7 @@ static int
 SurfaceCollisionCmd(ClientData clientData, Tcl_Interp *interp, 
                     int objc, Tcl_Obj *const objv[])
 {
-    SurfaceData *dataPtr = clientData;
+    /* SurfaceData *dataPtr = clientData; */
 
     Tcl_SetResult(interp, "e-notimpl", TCL_STATIC);
     return TCL_ERROR;
@@ -434,15 +433,15 @@ SurfaceConfigureCmd(ClientData clientData, Tcl_Interp *interp,
 	    case OPT_WINDOWID: {
 		char sz[32];
 		if (cget) {
-		    sprintf(sz, "0x%08x", dataPtr->windowid);
+		    sprintf(sz, "0x%08lx", dataPtr->windowid);
 		    resObj = Tcl_NewStringObj(sz, 10);
 		} else {
 		    long id;
 		    r = Tcl_GetLongFromObj(interp, objv[++opt], &id);
 		    if (r == TCL_OK) {
 			dataPtr->windowid = (unsigned long)id;
-			sprintf(sz, "SDL_WINDOWID=0x%08x", dataPtr->windowid);
-			SDL_putenv(sz);
+			sprintf(sz, "SDL_WINDOWID=0x%08lx", dataPtr->windowid);
+			putenv(sz);
 		    }
 		}
 		break;
@@ -586,7 +585,7 @@ SurfaceObjCmd(ClientData clientData, Tcl_Interp *interp,
 		if (Tcl_GetLongFromObj(interp, objv[option], 
 			(long *)&windowid) != TCL_OK)
 		    return TCL_OK;
-		sprintf(sz, "SDL_WINDOWID=0x%08x", windowid);
+		sprintf(sz, "SDL_WINDOWID=0x%08lx", windowid);
 		putenv(sz);
 		break;
 	    }

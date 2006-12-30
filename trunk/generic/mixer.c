@@ -188,7 +188,9 @@ static int
 MusicDeleteCmd(ClientData clientData, Tcl_Interp *interp, 
                int objc, Tcl_Obj *const objv[])
 {
-    MusicData *dataPtr = clientData;
+    /* MusicData *dataPtr = clientData; */
+
+    Tcl_SetResult(interp, "e-notimpl", TCL_STATIC);
     return TCL_ERROR;
 }
 
@@ -303,7 +305,7 @@ MixerInitCmd(ClientData clientData, Tcl_Interp *interp,
     const char *opts[] = {"-frequency", "-channels", "-chunk", 
                           "-format", NULL};
 
-    if (SDL_WasInit(0) & SDL_INIT_AUDIO == 0) {
+    if (SDL_WasInit(0) && SDL_INIT_AUDIO == 0) {
         if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
             Tcl_SetObjResult(interp, Tcl_NewStringObj(SDL_GetError(), -1));
             return TCL_ERROR;
@@ -322,10 +324,10 @@ MixerInitCmd(ClientData clientData, Tcl_Interp *interp,
             case OPT_FREQ:
                 ++option;
                 if (option >= objc) {
-                    Tcl_WrongNumArgs(interp, 2, objv, "-frequence Hz");
+                    Tcl_WrongNumArgs(interp, 2, objv, "-frequency Hz");
                     return TCL_ERROR;
                 }
-                if (Tcl_GetLongFromObj(interp, objv[option], &freq) != TCL_OK)
+                if (Tcl_GetIntFromObj(interp, objv[option], &freq) != TCL_OK)
                     return TCL_OK;
                 break;
             case OPT_CHANNELS:
@@ -334,7 +336,7 @@ MixerInitCmd(ClientData clientData, Tcl_Interp *interp,
                     Tcl_WrongNumArgs(interp, 2, objv, "-channels num");
                     return TCL_ERROR;
                 }
-                if (Tcl_GetLongFromObj(interp, objv[option], &freq) != TCL_OK)
+                if (Tcl_GetIntFromObj(interp, objv[option], &channels) != TCL_OK)
                     return TCL_OK;
                 break;
         }

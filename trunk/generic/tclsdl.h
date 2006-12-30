@@ -11,6 +11,14 @@ extern "C" {
 
 #include <tcl.h>
 
+#if HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+
+#if HAVE_STRING_H
+#include <string.h>
+#endif
+
 #ifndef PACKAGE_NAME
 #define PACKAGE_NAME "Tclsdl"
 #endif
