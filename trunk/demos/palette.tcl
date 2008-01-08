@@ -38,9 +38,8 @@ set title "Palette rotation"
 sdl::wm caption $title
 wm title . $title
 
-proc init_buffer {} {
-    global buffer VIDEOX VIDEOY TONES
-    set buffer {}
+proc init_buffer {screen} {
+    global VIDEOX VIDEOY TONES
     for {set y 0} {$y < $VIDEOY} {incr y} {
         set row {}
         for {set x 0} {$x < $VIDEOX} {incr x} {
@@ -48,9 +47,8 @@ proc init_buffer {} {
             set c2 [expr {int((sin(sqrt($y**2+($VIDEOX-$x)**2)/8)+1)/2*$TONES)}]
             set c3 [expr {int((sin(sqrt(($VIDEOY-$y)**2+$x**2)/8)+1)/2*$TONES)}]
             set c4 [expr {int((sin(sqrt(($VIDEOY-$y)**2+($VIDEOX-$x)**2)/8)+1)/2*$TONES)}]
-            lappend row [expr {($c1+$c2+$c3+$c4)/2}]
+            $screen pixel $x $y [expr {($c1+$c2+$c3+$c4)/2}] 
         }
-        lappend buffer $row
     }
 }
 
@@ -73,8 +71,7 @@ proc draw {screen} {
     $screen flip
 }
 
-init_buffer
-$screen setbuffer $buffer
+init_buffer $screen
 loop speed {
     draw $screen
 }
