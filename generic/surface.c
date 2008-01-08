@@ -226,6 +226,90 @@ SurfaceFlipCmd(ClientData clientData, Tcl_Interp *interp,
 }
 
 static int
+SurfacePixelCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    int color = 0;
+    int x, y ;
+    Uint8 * pixels;
+
+    if (objc < 4 || objc > 5 ) {
+        Tcl_WrongNumArgs(interp, 2, objv, "x y ?color?");
+        return TCL_ERROR;
+    }
+    
+    if (Tcl_GetIntFromObj(interp,objv[2],&x)!=TCL_OK) {
+        Tcl_AppendResult(interp,"x is not a valid int",NULL);
+        return TCL_ERROR;
+    }
+    if (Tcl_GetIntFromObj(interp,objv[3],&y)!=TCL_OK) {
+        Tcl_AppendResult(interp,"x is not a valid int",NULL);
+        return TCL_ERROR;
+    }
+
+    pixels = (Uint8 *)dataPtr->surface->pixels;
+    if (objc == 5) {
+        if (Tcl_GetIntFromObj(interp,objv[4],&color)!=TCL_OK) {
+            Tcl_AppendResult(interp,"color is not a valid int",NULL);
+            return TCL_ERROR;
+        }
+        pixels[(y*dataPtr->surface->w)+x] = (Uint8)color;
+    } else {
+        color = (int)pixels[(y*dataPtr->surface->w)+x];
+        Tcl_SetObjResult(interp,Tcl_NewIntObj(color));
+    }
+    return TCL_OK;
+}
+
+static int
+SurfaceSetColorsCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    unsigned long firstcolor = 0;
+    int i;
+    int listObjc, colorObjc;
+    int col;
+    int res = TCL_OK;
+    SDL_Color * colors;
+    Tcl_Obj ** listObjv;
+    Tcl_Obj ** colorObjv ;
+
+    if (objc != 4) {
+        Tcl_WrongNumArgs(interp, 2, objv, "colors firstcolor");
+        return TCL_ERROR;
+    }
+    
+    if (Tcl_GetLongFromObj(interp, objv[3], (long *)&firstcolor) != TCL_OK)
+        return TCL_ERROR;
+
+    if (Tcl_ListObjGetElements(interp,objv[2],&listObjc,&listObjv)!=TCL_OK) {
+        Tcl_AppendResult(interp,"colors is not a valid list",NULL);
+        return TCL_ERROR;
+    }
+    colors = (SDL_Color *)ckalloc(listObjc*sizeof(SDL_Color));
+    for (i = 0 ; i < listObjc; i++) {
+        if (Tcl_ListObjGetElements(interp,listObjv[i],&colorObjc,&colorObjv)!=TCL_OK || colorObjc != 3) {
+            Tcl_AppendResult(interp,"invalid color",NULL);
+            return TCL_ERROR;
+        }
+        Tcl_GetIntFromObj(interp,colorObjv[0],&col);
+        colors[i].r = (Uint8)col;
+        Tcl_GetIntFromObj(interp,colorObjv[1],&col);
+        colors[i].g = (Uint8)col;
+        Tcl_GetIntFromObj(interp,colorObjv[2],&col);
+        colors[i].b = (Uint8)col;
+    }
+    if (SDL_SetColors(dataPtr->surface,colors,firstcolor,listObjc)!=1) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj(SDL_GetError(), -1));
+        res = TCL_ERROR;
+    }
+    ckfree((char *)colors);
+    return res;
+}
+
+static int
 SurfaceSetColorKeyCmd(ClientData clientData, Tcl_Interp *interp, 
                   int objc, Tcl_Obj *const objv[])
 {
@@ -250,6 +334,147 @@ SurfaceSetColorKeyCmd(ClientData clientData, Tcl_Interp *interp,
     }
     return TCL_OK;
 }
+
+static int
+SurfaceMustLockCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    int res ;
+    SurfaceData *dataPtr = clientData;
+    if (objc != 2) {
+        Tcl_WrongNumArgs(interp, 2, objv, NULL);
+        return TCL_ERROR;
+    }
+    
+    res = SDL_MUSTLOCK(dataPtr->surface);
+    if (res!=0) {
+        res = 1;
+    }
+    Tcl_SetObjResult(interp,Tcl_NewIntObj(res));
+    return TCL_OK;
+}
+
+static int
+SurfaceGetBufferCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    Uint8 * pixels ;
+    int color ;
+    int x , y;
+    Tcl_Obj * row;
+    Tcl_Obj * buffer;
+
+    if (objc != 2) {
+        Tcl_WrongNumArgs(interp, 2, objv, NULL);
+        return TCL_ERROR;
+    }
+
+    pixels = (Uint8 *)dataPtr->surface->pixels;
+    buffer = Tcl_NewListObj(0,NULL);
+    
+    for (y = 0 ; y < dataPtr->surface->h; y++) {
+        row = Tcl_NewListObj(0,NULL);
+        for (x = 0 ; x < dataPtr->surface->w; x++) {
+            color = pixels[y*dataPtr->surface->w+x];
+            Tcl_ListObjAppendElement(interp,row,Tcl_NewIntObj(color));
+        }
+        Tcl_ListObjAppendElement(interp,buffer,row);
+    }
+    Tcl_SetObjResult(interp,buffer);
+    return TCL_OK;
+}
+
+static int
+SurfaceSetBufferCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    Uint8 * pixels ;
+    int color ;
+    int x , y;
+    int res = TCL_OK;
+    Tcl_Obj ** xObjv ;
+    Tcl_Obj ** yObjv ;
+    int nr_x, nr_y ;
+
+
+    if (objc != 3) {
+        Tcl_WrongNumArgs(interp, 2, objv, "buffer");
+        return TCL_ERROR;
+    }
+    
+    if (Tcl_ListObjGetElements(interp,objv[2],&nr_y,&yObjv)!=TCL_OK) {
+        Tcl_AppendResult(interp,"buffer is not a valid list",NULL);
+        return TCL_ERROR;
+    }
+    pixels = (Uint8 *)dataPtr->surface->pixels;
+    for (y = 0 ; y < nr_y && y < dataPtr->surface->h; y++) {
+        if (Tcl_ListObjGetElements(interp,yObjv[y],&nr_x,&xObjv)!=TCL_OK) {
+            Tcl_AppendResult(interp,"invalid row list",NULL);
+            return TCL_ERROR;
+        }
+        for (x = 0 ; x < nr_x && x < dataPtr->surface->w; x++) {
+            Tcl_GetIntFromObj(interp,xObjv[x],&color);
+            pixels[y*dataPtr->surface->w+x] = (Uint8)color;
+        }
+    }
+    return TCL_OK;
+}
+
+static int
+SurfaceGetRawBufferCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    void * pixels ;
+    int w;
+    int h;
+    Tcl_Obj * buffer;
+
+    if (objc != 2) {
+        Tcl_WrongNumArgs(interp, 2, objv, NULL);
+        return TCL_ERROR;
+    }
+
+    pixels = dataPtr->surface->pixels;
+    w = dataPtr->surface->w;
+    h = dataPtr->surface->h;
+    buffer = Tcl_NewByteArrayObj(pixels,w*h*sizeof(Uint8));
+    
+    Tcl_SetObjResult(interp,buffer);
+    return TCL_OK;
+}
+
+static int
+SurfaceSetRawBufferCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    SurfaceData *dataPtr = clientData;
+    Uint8 * pixels ;
+    char * bytes;
+    int w;
+    int h;
+    int length;
+
+    if (objc != 3) {
+        Tcl_WrongNumArgs(interp, 2, objv, "rawbuffer");
+        return TCL_ERROR;
+    }
+
+    pixels = (Uint8 *)dataPtr->surface->pixels;
+    w = dataPtr->surface->w;
+    h = dataPtr->surface->h;
+    bytes = Tcl_GetByteArrayFromObj(objv[2],&length);
+    if (length < h*w) {
+        Tcl_AppendResult(interp, "rawbuffer not big enough for this surface",NULL);
+        return TCL_ERROR;
+    }
+    memcpy((char *)pixels,bytes,h*w);
+    return TCL_OK;
+}
+
+
 
 /*
  * $surface blit $surface x y ?sourcerect?
@@ -327,7 +552,7 @@ SurfaceFillCmd(ClientData clientData, Tcl_Interp *interp,
     
     if (SDL_FillRect(dataPtr->surface, rectPtr, color) < 0) {
         Tcl_SetObjResult(interp, Tcl_NewStringObj(SDL_GetError(), -1));
-        return TCL_ERROR;
+
     }
     return TCL_OK;
 }
@@ -354,12 +579,12 @@ SurfaceConfigureCmd(ClientData clientData, Tcl_Interp *interp,
 {
     SurfaceData *dataPtr = clientData;
     int opt, index, cget = 0, r = TCL_OK;
-    int width = 0, height = 0, bpp = 0, flags = 0;
+    int width = 0, height = 0, bpp = 0, flags = 0, pitch = 0;
     Tcl_Obj *resObj = NULL;
-    enum { OPT_HEIGHT, OPT_WIDTH, OPT_BPP, OPT_FULLSCREEN, OPT_RESIZE, 
+    enum { OPT_HEIGHT, OPT_WIDTH, OPT_BPP, OPT_FULLSCREEN, OPT_PITCH, OPT_RESIZE, 
 	   OPT_WINDOWID };
     const char *options[] = {
-	"-height", "-width", "-bpp", "-fullscreen", "-resizable", 
+	"-height", "-width", "-bpp", "-fullscreen",  "-pitch", "-resizable", 
 	"-windowid", NULL
     };
     
@@ -367,6 +592,7 @@ SurfaceConfigureCmd(ClientData clientData, Tcl_Interp *interp,
     width = dataPtr->surface->w;
     bpp = dataPtr->surface->format->BitsPerPixel;
     flags = dataPtr->surface->flags;
+    pitch = dataPtr->surface->pitch;
 
     if (objc == 2) {
 	Tcl_Obj *listObj = Tcl_NewListObj(-1, NULL);
@@ -422,7 +648,14 @@ SurfaceConfigureCmd(ClientData clientData, Tcl_Interp *interp,
 		} else {
 		    r = Tcl_GetIntFromObj(interp, objv[++opt], &width);
 		}
-		break;
+        break;
+	    case OPT_PITCH:
+		if (cget) {
+		    resObj = Tcl_NewIntObj(pitch);
+		} else {
+		    r = Tcl_GetIntFromObj(interp, objv[++opt], &width);
+		}
+        break;
 	    case OPT_BPP:
 		if (cget) {
 		    resObj = Tcl_NewIntObj(bpp);
@@ -485,11 +718,18 @@ SurfaceConfigureCmd(ClientData clientData, Tcl_Interp *interp,
 }
 
 struct Ensemble surfaceEnsemble[] = {
+    { "getbuffer", SurfaceGetBufferCmd, NULL },
+    { "getrawbuffer", SurfaceGetRawBufferCmd, NULL },
+    { "setbuffer", SurfaceSetBufferCmd, NULL },
+    { "setrawbuffer", SurfaceSetRawBufferCmd, NULL },
     { "delete", SurfaceDeleteCmd, NULL },
     { "flip",   SurfaceFlipCmd, NULL },
     { "blit",   SurfaceBlitCmd, NULL },
+    { "pixel",   SurfacePixelCmd, NULL },
     { "fill",   SurfaceFillCmd, NULL },
     { "configure", SurfaceConfigureCmd, NULL },
+    { "mustlock", SurfaceMustLockCmd, NULL },
+    { "setcolors", SurfaceSetColorsCmd, NULL},
     { "setcolorkey", SurfaceSetColorKeyCmd, NULL},
     { NULL, NULL, NULL },
 };
@@ -541,7 +781,7 @@ SurfaceObjCmd(ClientData clientData, Tcl_Interp *interp,
     static int uid = 0;
     char name[4 + TCL_INTEGER_SPACE];
 
-    enum {SURF_WIDTH, SURF_HEIGHT, SURF_BPP, SURF_BITMAP, SURF_FULLSCREEN,
+    enum {SURF_WIDTH, SURF_HEIGHT, SURF_BPP, SURF_BITMAP, SURF_FULLSCREEN, 
     SURF_RESIZE, SURF_WINDOWID};
     static const char * cmds[] = {
         "-width", "-height", "-bpp", "-bitmap", "-fullscreen", "-resizable", 
