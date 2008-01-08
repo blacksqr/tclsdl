@@ -79,8 +79,8 @@ SDLColor_SetFromAny(Tcl_Interp *interp, Tcl_Obj *objPtr)
         b = (int)((value     ) & 0xff);
     } else if (objc == 3) {
         if (Tcl_GetIntFromObj(interp, objv[0], &r) != TCL_OK
-            || Tcl_GetIntFromObj(interp, objv[0], &r) != TCL_OK
-            || Tcl_GetIntFromObj(interp, objv[0], &r) != TCL_OK) {
+            || Tcl_GetIntFromObj(interp, objv[1], &g) != TCL_OK
+            || Tcl_GetIntFromObj(interp, objv[2], &b) != TCL_OK) {
             return TCL_ERROR;
         }
     }
@@ -198,8 +198,9 @@ GetSDLRectFromObj(Tcl_Interp *interp, Tcl_Obj *objPtr, SDL_Rect *rectPtr)
     return TCL_OK;
 }
 
-/* ---------------------------------------------------------------------- */
-
+/* ----------------------------------------------------------------------
+ * Direct pixel access functions
+ */
 
 static int SetPixel8(Tcl_Interp * interp, SDL_Surface * surface, int x, int y, Tcl_Obj * colorObj) {
     Uint8 * pixels = (Uint8 *)surface->pixels;
@@ -207,9 +208,60 @@ static int SetPixel8(Tcl_Interp * interp, SDL_Surface * surface, int x, int y, T
     if (Tcl_GetIntFromObj(interp,colorObj,&color)!=TCL_OK) {
         return TCL_ERROR;
     }
-    pixels[y*surface->pitch+x] =  color ;
+    pixels[y*surface->pitch+x] =  (Uint8)color ;
     return TCL_OK;
 }
+
+static int GetPixel8(Tcl_Interp * interp, SDL_Surface * surface, int x, int y, Tcl_Obj ** colorObj) {
+    Uint8 * pixels = (Uint8 *)surface->pixels;
+    int color = 0;
+    color = (int)pixels[y*surface->pitch+x] ;
+    *colorObj = Tcl_NewIntObj(color);
+    return TCL_OK;
+}
+
+static int SetPixel32(Tcl_Interp * interp, SDL_Surface * surface, int x, int y, Tcl_Obj * colorObj) {
+    Uint32 * pixels = (Uint8 *)surface->pixels;
+    int objc, r, g, b;
+    Tcl_Obj ** objv;
+    unsigned long color;
+    if (Tcl_ListObjGetElements(interp, colorObj, &objc, &objv) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    if (objc != 3) {
+        Tcl_SetObjResult(interp, Tcl_NewStringObj("32 bit colors require a {r g b} list",-1));
+        return TCL_ERROR;
+    }
+    if (Tcl_GetIntFromObj(interp, objv[0], &r) != TCL_OK
+            || Tcl_GetIntFromObj(interp, objv[1], &g) != TCL_OK
+            || Tcl_GetIntFromObj(interp, objv[2], &b) != TCL_OK) {
+        return TCL_ERROR;
+    }
+    color = (b << 16) + (g << 8) + r;
+    pixels[y*surface->pitch/4+x] =  (Uint32)color ;
+
+    return TCL_OK;
+}
+
+static int GetPixel32(Tcl_Interp * interp, SDL_Surface * surface, int x, int y, Tcl_Obj ** colorObj) {
+    Uint32 * pixels = (Uint32 *)surface->pixels;
+    Uint32 color = 0;
+    Tcl_Obj * rgb;
+    unsigned int r, g, b ;
+    color = pixels[y*surface->pitch/4+x] ;
+
+    r = ( color >> 0 ) && 0xFF;
+    g = ( color >> 8 ) && 0xFF;
+    b = ( color >> 16 ) && 0xFF;
+    rgb = Tcl_NewListObj(0,NULL);
+    Tcl_ListObjAppendElement(interp,rgb, Tcl_NewIntObj(r));
+    Tcl_ListObjAppendElement(interp,rgb, Tcl_NewIntObj(g));
+    Tcl_ListObjAppendElement(interp,rgb, Tcl_NewIntObj(b));
+    *colorObj = rgb;
+    return TCL_OK;
+}
+
+/* ---------------------------------------------------------------------- */
 
 static int
 SurfaceDeleteCmd(ClientData clientData, Tcl_Interp *interp, 
@@ -240,37 +292,44 @@ static int
 SurfacePixelCmd(ClientData clientData, Tcl_Interp *interp, 
                   int objc, Tcl_Obj *const objv[])
 {
+    int (*getPixelProcPtr)(Tcl_Interp *, SDL_Surface *, int, int, Tcl_Obj **) = NULL ; 
+    int (*setPixelProcPtr)(Tcl_Interp *, SDL_Surface *, int, int, Tcl_Obj *) = NULL ; 
     SurfaceData *dataPtr = clientData;
-    int color = 0;
-    int x, y ;
-    Uint32 * pixels;
+    int x, y, rc ;
+    Tcl_Obj * res ; 
 
     if (objc < 4 || objc > 5 ) {
         Tcl_WrongNumArgs(interp, 2, objv, "x y ?color?");
         return TCL_ERROR;
     }
-    
-    if (Tcl_GetIntFromObj(interp,objv[2],&x)!=TCL_OK) {
-        Tcl_AppendResult(interp,"x is not a valid int",NULL);
-        return TCL_ERROR;
+
+    switch (dataPtr->surface->format->BitsPerPixel) {
+        case 8:
+            setPixelProcPtr = SetPixel8;
+            getPixelProcPtr = GetPixel8;
+            break;
+        case 32:
+            setPixelProcPtr = SetPixel32;
+            getPixelProcPtr = GetPixel32;
+            break;
+        default:
+            Tcl_AppendResult(interp,"operation not supported for this surface format",NULL);
+            return TCL_ERROR;
     }
-    if (Tcl_GetIntFromObj(interp,objv[3],&y)!=TCL_OK) {
-        Tcl_AppendResult(interp,"x is not a valid int",NULL);
+    
+    if (Tcl_GetIntFromObj(interp,objv[2],&x)!=TCL_OK || Tcl_GetIntFromObj(interp,objv[3],&y)!=TCL_OK) {
         return TCL_ERROR;
     }
 
-    pixels = (Uint32 *)dataPtr->surface->pixels;
     if (objc == 5) {
-        if (Tcl_GetIntFromObj(interp,objv[4],&color)!=TCL_OK) {
-            Tcl_AppendResult(interp,"color is not a valid int",NULL);
-            return TCL_ERROR;
-        }
-        pixels[(y*dataPtr->surface->w)+x] = (Uint32)color;
+        rc = setPixelProcPtr(interp, dataPtr->surface, x, y, objv[4]);
     } else {
-        color = (int)pixels[(y*dataPtr->surface->w)+x];
-        Tcl_SetObjResult(interp,Tcl_NewIntObj(color));
+        rc = getPixelProcPtr(interp, dataPtr->surface, x, y, &res);
+        if (rc==TCL_OK) {
+            Tcl_SetObjResult(interp,res);
+        }
     }
-    return TCL_OK;
+    return rc;
 }
 
 static int
@@ -297,13 +356,8 @@ SurfaceSetColorsCmd(ClientData clientData, Tcl_Interp *interp,
         return TCL_ERROR;
     }
     
-    if (Tcl_GetLongFromObj(interp, objv[3], (long *)&firstcolor) != TCL_OK) {
-        Tcl_AppendResult(interp,"firstcolor is not a valid integer",NULL);
-        return TCL_ERROR;
-    }
-
-    if (Tcl_ListObjGetElements(interp,objv[2],&listObjc,&listObjv)!=TCL_OK) {
-        Tcl_AppendResult(interp,"colors is not a valid list",NULL);
+    if (Tcl_GetLongFromObj(interp, objv[3], (long *)&firstcolor) != TCL_OK || 
+            Tcl_ListObjGetElements(interp,objv[2],&listObjc,&listObjv)!=TCL_OK) {
         return TCL_ERROR;
     }
     colors = (SDL_Color *)ckalloc(listObjc*sizeof(SDL_Color));
@@ -378,7 +432,6 @@ SurfaceGetBufferCmd(ClientData clientData, Tcl_Interp *interp,
 {
     SurfaceData *dataPtr = clientData;    
     Uint32* pixels ;
-    int bpp;
     int color ;
     int x , y;
     Tcl_Obj * row;
