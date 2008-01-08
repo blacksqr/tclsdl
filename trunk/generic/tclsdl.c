@@ -256,6 +256,19 @@ EventObjCmd(ClientData clientData, Tcl_Interp *interp,
     return TCL_OK;
 }
 
+static int
+WmObjCmd(ClientData clientData, Tcl_Interp *interp, 
+                  int objc, Tcl_Obj *const objv[])
+{
+    if (objc != 3) {
+        return TCL_ERROR;
+
+    }
+    SDL_WM_SetCaption(Tcl_GetString(objv[2]),NULL);
+    return TCL_OK;
+}
+
+
 static void
 InterpDeleteProc(ClientData clientData, Tcl_Interp *interp)
 {
@@ -293,6 +306,7 @@ Tclsdl_Init(Tcl_Interp *interp)
     Tcl_CreateObjCommand(interp, "sdl::warp", WarpObjCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "sdl::version", VersionObjCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "sdl::videoinfo", InfoObjCmd, NULL, NULL);
+    Tcl_CreateObjCommand(interp, "sdl::wm", WmObjCmd, NULL, NULL);
     Tcl_CreateObjCommand(interp, "sdl::event", EventObjCmd, NULL, NULL);
 
     if (Tcl_Eval(interp, initScript) != TCL_OK)
