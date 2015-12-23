@@ -1,0 +1,1 @@
+Permit Tcl programs to use the Simple Direct Media Layer (SDL) libraries to create graphical programs and games.
